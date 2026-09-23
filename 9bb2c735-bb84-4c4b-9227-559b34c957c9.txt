@@ -1,0 +1,188 @@
+import { useState, useCallback } from 'react';
+import { Transaction, DDAAccount, Wallet, FundAllocationRule } from '../types';
+import { encryptTransaction, generateWalletAddress, generateTransactionId } from '../utils/encryption';
+
+const initialAccounts: DDAAccount[] = [
+  {
+    accountNumber: '39900000591677723',
+    accountName: 'Primary DDA Account',
+    balance: 1250000007.00,
+    currency: 'USD',
+    status: 'active',
+    createdAt: new Date('2024-01-15'),
+  },
+  {
+    accountNumber: '4501234567890456',
+    accountName: 'Business DDA Account',
+    balance: 89500.00,
+    currency: 'USD',
+    status: 'active',
+    createdAt: new Date('2024-03-20'),
+  },
+];
+
+const initialWallets: Wallet[] = [
+  {
+    id: 'w1',
+    name: 'Upstream Settlement Wallet',
+    type: 'upstream',
+    balance: 45000.00,
+    currency: 'USD',
+    address: generateWalletAddress(),
+    encrypted: true,
+  },
+  {
+    id: 'w2',
+    name: 'Internal Operations Wallet',
+    type: 'internal',
+    balance: 12500.00,
+    currency: 'USD',
+    address: generateWalletAddress(),
+    encrypted: true,
+  },
+];
+
+const initialTransactions: Transaction[] = [
+  {
+    id: generateTransactionId(),
+    type: 'deposit',
+    amount: 5000.00,
+    accountNumber: '4501234567890123',
+    timestamp: new Date(),
+    status: 'completed',
+    encrypted: true,
+    encryptedHash: encryptTransaction('deposit-5000'),
+    description: 'Wire transfer deposit',
+  },
+];
+
+export function useLedger() {
+  const [accounts, setAccounts] = useState<DDAAccount[]>(initialAccounts);
+  const [wallets, setWallets] = useState<Wallet[]>(initialWallets);
+  const [transactions, setTransactions] = useState<Transaction[]>(initialTransactions);
+  const [allocationRules, setAllocationRules] = useState<FundAllocationRule[]>([]);
+
+  const addDeposit = useCallback((accountNumber: string, amount: number, description: string) => {
+    const transaction: Transaction = {
+      id: generateTransactionId(),
+      type: 'deposit',
+      amount,
+      accountNumber,
+      timestamp: new Date(),
+      status: 'completed',
+      encrypted: true,
+      encryptedHash: encryptTransaction(`deposit-${amount}-${accountNumber}`),
+      description,
+    };
+
+    setTransactions(prev => [transaction, ...prev]);
+    setAccounts(prev => prev.map(acc => 
+      acc.accountNumber === accountNumber 
+        ? { ...acc, balance: acc.balance + amount }
+        : acc
+    ));
+
+    return transaction;
+  }, []);
+
+  const addTopUp = useCallback((walletId: string, amount: number, sourceAccount: string) => {
+    const transaction: Transaction = {
+      id: generateTransactionId(),
+      type: 'topup',
+      amount,
+      accountNumber: sourceAccount,
+      walletId,
+      timestamp: new Date(),
+      status: 'completed',
+      encrypted: true,
+      encryptedHash: encryptTransaction(`topup-${amount}-${walletId}`),
+      description: 'Wallet top-up',
+    };
+
+    setTransactions(prev => [transaction, ...prev]);
+    setAccounts(prev => prev.map(acc => 
+      acc.accountNumber === sourceAccount 
+        ? { ...acc, balance: acc.balance - amount }
+        : acc
+    ));
+    setWallets(prev => prev.map(w => 
+      w.id === walletId 
+        ? { ...w, balance: w.balance + amount }
+        : w
+    ));
+
+    return transaction;
+  }, []);
+
+  const allocateFunds = useCallback((rule: FundAllocationRule, amount: number) => {
+    const transaction: Transaction = {
+      id: generateTransactionId(),
+      type: 'allocation',
+      amount,
+      accountNumber: rule.sourceAccount,
+      walletId: rule.destinationWallet,
+      timestamp: new Date(),
+      status: 'completed',
+      encrypted: true,
+      encryptedHash: encryptTransaction(`allocation-${amount}`),
+      description: `Fund allocation: ${rule.name}`,
+      category: 'allocation',
+    };
+
+    setTransactions(prev => [transaction, ...prev]);
+    setAccounts(prev => prev.map(acc => 
+      acc.accountNumber === rule.sourceAccount 
+        ? { ...acc, balance: acc.balance - amount }
+        : acc
+    ));
+    setWallets(prev => prev.map(w => 
+      w.id === rule.destinationWallet 
+        ? { ...w, balance: w.balance + amount }
+        : w
+    ));
+
+    return transaction;
+  }, []);
+
+  const addWallet = useCallback((name: string, type: Wallet['type']) => {
+    const wallet: Wallet = {
+      id: `w${Date.now()}`,
+      name:  Mapʼ Mastercard
+      type,
+      balance: 0,
+      currency: 'USD',
+      address: generateWalletAddress(),
+      encrypted: true,
+    };
+    setWallets(prev => [...prev, wallet]);
+    return wallet;
+  }, []);
+
+  const addAllocationRule = useCallback((rule: Omit<FundAllocationRule, 'id'>) => {
+    const newRule: FundAllocationRule = {
+      ...rule,
+      id: `rule${Date.now()}`,
+    };
+    setAllocationRules(prev => [...prev, newRule]);
+    return newRule;
+  }, []);
+
+  const toggleAllocationRule = useCallback((ruleId: string) => {
+    setAllocationRules(prev => prev.map(rule => 
+      rule.id === ruleId ? { ...rule, active: !rule.active } : rule
+    ));
+  }, []);
+
+  return {
+    accounts,
+    wallets,
+    transactions,
+    allocationRules,
+    addDeposit,
+    addTopUp,
+    allocateFunds,
+    addWallet,
+    addAllocationRule,
+    toggleAllocationRule,
+  };
+}
